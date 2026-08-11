@@ -214,7 +214,7 @@
 
   <div class="row">
     <label>Искры, количество <span class="val" id="v-sparkcount"></span></label>
-    <input type="range" id="sparkcount" min="0" max="100" value="30">
+    <input type="range" id="sparkcount" min="0" max="300" value="6">
   </div>
 
   <hr>
@@ -351,21 +351,26 @@ float fieldDiagonal(vec2 p, float t) {
 }
 
 // --- Искры ------------------------------------------------------------
-// Сетка ячеек, в каждой не больше одной искры со своей фазой — иначе они
-// мигают в такт, и это сразу читается как узор. Порог редкости берётся
-// со слайдера (uSparkThr), а вся сетка медленно едет по экрану (drift) —
-// так за минуту искры успевают смениться по всей площади, а не мигать
-// вечно в одних и тех же двух-трёх точках.
+// Мелкая сетка ячеек (SPARK_CELLS в ширину — с запасом под до 300 штук),
+// в каждой не больше одной искры со своей фазой — иначе они мигают в
+// такт, и это сразу читается как узор. Порог редкости берётся со
+// слайдера (uSparkThr, JS считает его из целевого числа искр). Каждые
+// SPARK_GEN секунд по «часам» вся сетка целиком перетасовывается —
+// новый набор случайных ячеек проходит порог, старый гаснет — поэтому
+// искры не мигают вечно в одних и тех же точках, а появляются по всей
+// площади экрана.
+const float SPARK_CELLS = 16.0;
+const float SPARK_GEN = 2.4;
 float sparkles(vec2 uv, float t) {
   float sum = 0.0;
-  vec2 drift = vec2(t * 0.045, -t * 0.03);
-  vec2 g = uv * vec2(3.5, 3.5 * uRes.y / uRes.x) + drift;
+  vec2 genOff = vec2(floor(t / SPARK_GEN) * 13.73, floor(t / SPARK_GEN) * 91.27);
+  vec2 g = uv * vec2(SPARK_CELLS, SPARK_CELLS * uRes.y / uRes.x);
   vec2 cell = floor(g);
   vec2 f = fract(g);
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       vec2 c = cell + vec2(float(dx), float(dy));
-      vec2 h = hash2(c);
+      vec2 h = hash2(c + genOff);
       if (h.x < uSparkThr) continue;
       vec2 pos = vec2(h.y, fract(h.x * 7.31));
       float d = length(f - vec2(float(dx), float(dy)) - pos);
@@ -374,7 +379,7 @@ float sparkles(vec2 uv, float t) {
       float tw = 0.5 + 0.5 * sin((t * 0.55 + ph) * 6.2831);
       tw = pow(tw, 3.0);                     // короткая вспышка, долгая пауза
       // Разброс размера: 2–5px радиуса (4–10px в диаметре), свой на ячейку.
-      vec2 hs = hash2(c + 17.0);
+      vec2 hs = hash2(c + genOff + 17.0);
       float rPx = mix(2.0, 5.0, hs.x);
       float rUv = rPx * uSparkPx;
       float dn = d / max(rUv, 0.0001);
@@ -462,31 +467,31 @@ const PRESETS = [
   {
     name: "Туман",
     mode: 0, edge: 0, base: 0.34,
-    speed: 258, warp: 100, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 30,
+    speed: 258, warp: 100, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 6,
     colors: ["#0d1020", "#232a4d", "#7b3fc4", "#c49bc8"],
   },
   {
     name: "Лента",
     mode: 1, edge: 95, base: 0.14,
-    speed: 258, warp: 85, scale: 145, bright: 100, grain: 100, spark: true, sparkCount: 30,
+    speed: 258, warp: 85, scale: 145, bright: 100, grain: 100, spark: true, sparkCount: 6,
     colors: ["#04030a", "#170f35", "#2f6fae", "#c94fb0", "#ff5d6c", "#ffc24d"],
   },
   {
     name: "Холод",
     mode: 1, edge: 30, base: 0.364,
-    speed: 240, warp: 90, scale: 120, bright: 100, grain: 100, spark: true, sparkCount: 30,
+    speed: 240, warp: 90, scale: 120, bright: 100, grain: 100, spark: true, sparkCount: 6,
     colors: ["#050209", "#150b28", "#2c2181", "#593a8d", "#ca86cc", "#f2cf57"],
   },
   {
     name: "Кислота",
     mode: 1, edge: 85, base: 0.408,
-    speed: 270, warp: 115, scale: 105, bright: 105, grain: 100, spark: true, sparkCount: 30,
+    speed: 270, warp: 115, scale: 105, bright: 105, grain: 100, spark: true, sparkCount: 6,
     colors: ["#050209", "#472493", "#5424a0", "#d94199", "#e5f190", "#f7e30b"],
   },
   {
     name: "Диагонали",
     mode: 2, edge: 45, base: 0.34,
-    speed: 250, warp: 70, scale: 130, bright: 100, grain: 100, spark: false, sparkCount: 30,
+    speed: 250, warp: 70, scale: 130, bright: 100, grain: 100, spark: false, sparkCount: 6,
     colors: ["#050209", "#2a1550", "#62429c", "#a230a5", "#cb1e61", "#ffb347"],
   },
 ];
@@ -952,8 +957,16 @@ function frame(now) {
   gl.uniform1f(U.uEdge, +S.edge.value / 100);
   gl.uniform1f(U.uBase, slots[active].base);
   gl.uniform1f(U.uSpark, sparkBox.checked ? 0.85 : 0.0);
-  // Слайдер 0..100 -> порог редкости 0.97..0.55 (реже..чаще).
-  gl.uniform1f(U.uSparkThr, 0.97 - (+S.sparkcount.value / 100) * 0.42);
+  // Слайдер — целевое число искр; порог считаем из размера сетки (SPARK_CELLS
+  // в шейдере, держим то же число здесь), чтобы значение слайдера примерно
+  // совпадало с тем, сколько ячеек реально пройдёт порог.
+  {
+    const cellsX = 16;
+    const cellsY = cellsX * (canvas.height / (canvas.width || 1));
+    const totalCells = cellsX * cellsY;
+    const thr = 1 - (+S.sparkcount.value) / totalCells;
+    gl.uniform1f(U.uSparkThr, Math.max(0, Math.min(1, thr)));
+  }
   // uv на один CSS-пиксель: искры калибруются в px независимо от dpr.
   gl.uniform1f(U.uSparkPx, canvas.clientWidth ? 1 / canvas.clientWidth : 0);
   for (let i = 0; i < +S.count.value; i++) {
