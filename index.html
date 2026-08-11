@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1020">
+<title>Живой градиент</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    padding: 22px;
+    background: #16181d;
+    color: #e8eaed;
+    font: 14px/1.45 -apple-system, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Рамка телефона: 9:19.5 — пропорции современных моделей. */
+  #phone {
+    position: relative;
+    flex: none;
+    aspect-ratio: 9 / 19.5;
+    height: min(88vh, 760px);
+    padding: 5px;
+    border-radius: 42px;
+    background: #22252b;
+    box-shadow: 0 0 0 1px #34383f, 0 30px 60px -20px rgba(0,0,0,.8);
+  }
+  #canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 37px;
+    background: #0d1020;
+  }
+  #notch {
+    position: absolute;
+    top: 15px; left: 50%;
+    transform: translateX(-50%);
+    width: 82px; height: 23px;
+    border-radius: 12px;
+    background: rgba(0,0,0,.5);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* --- Интерфейс поверх градиента ----------------------------------
+     Всё позиционируется абсолютно в % от размера экрана — числа сняты
+     замером макета img/main design.png (786x1700). Поток с отступами тут
+     не подходит: он копит погрешность, и блоки уезжают от макета.
+     Кегли — в % от высоты экрана через переменную --u. */
+  #ui {
+    position: absolute;
+    inset: 5px;
+    border-radius: 37px;
+    overflow: hidden;
+    color: #fff;
+    pointer-events: none;
+    z-index: 2;
+    --u: 1px;               /* задаётся из JS: 1% высоты экрана */
+    font-size: calc(var(--u) * 1.9);
+  }
+  #ui > * { position: absolute; }
+
+  /* Статус-бар: 9:41 слева, индикаторы справа. */
+  .statusbar {
+    top: 1.7%; left: 8.7%; right: 5%;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: calc(var(--u) * 1.85);
+    font-weight: 600;
+  }
+  .statusbar .icons { display: flex; gap: calc(var(--u) * .5); align-items: center; }
+  .bar { width: calc(var(--u) * .42); border-radius: 1px; background: #fff; }
+
+  /* Закрыть / монеты — одна строка, верх 6.6% высоты. */
+  .link {
+    top: 6.9%; left: 4.3%;
+    color: #3d8cf7;
+    font-size: calc(var(--u) * 1.86);
+    font-weight: 500;
+  }
+  .coins {
+    top: 6.6%; right: 3.7%;
+    width: 15.6%; height: 3.2%;
+    display: flex; align-items: center; justify-content: center;
+    gap: 4%;
+    border-radius: 999px;
+    background: rgba(44,44,46,.72);
+    font-size: calc(var(--u) * 1.8);
+    font-weight: 600;
+  }
+  .coin {
+    width: calc(var(--u) * 2.1); height: calc(var(--u) * 2.1);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffd77a, #e8a33d 70%);
+  }
+
+  /* Пилюля бага и кружок «?» */
+  .bug {
+    top: 11.4%; left: 4.1%;
+    width: 38%; height: 3.5%;
+    display: flex; align-items: center; justify-content: center;
+    gap: 4%;
+    border-radius: 999px;
+    background: rgba(40,38,81,.78);
+    color: #3d8cf7;
+    font-size: calc(var(--u) * 1.55);
+    font-weight: 500;
+  }
+  .help {
+    top: 11.8%; right: 4.3%;
+    width: 5.7%; aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: rgba(220,220,227,.92);
+    color: #1c1c1e;
+    font-size: calc(var(--u) * 1.75);
+    font-weight: 700;
+  }
+
+  /* Логотип: видимая часть 50% ширины, верх 26.6%. В файле по краям
+     прозрачные поля (518 из 600 px), поэтому тег шире — 58%. */
+  .logo {
+    top: 25.5%; left: 50%;
+    transform: translateX(-50%);
+    width: 58%;
+    filter: drop-shadow(0 0 calc(var(--u) * 3) rgba(190,130,255,.3));
+  }
+
+  .tagline {
+    top: 40.8%; left: 8%; right: 8%;
+    margin: 0;
+    text-align: center;
+    font-size: calc(var(--u) * 1.73);
+    line-height: 1.45;
+    font-weight: 400;
+  }
+
+  /* Кнопки: ширина и высота из макета. */
+  .cta {
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: calc(var(--u) * 1.9);
+    font-size: calc(var(--u) * 1.8);
+    font-weight: 600;
+  }
+  .cta.primary {
+    top: 47.9%; width: 48.7%; height: 5.35%;
+    background: #ffdd2d;
+    color: #1a1a1a;
+  }
+  .cta.ghost {
+    top: 54.1%; width: 62.3%; height: 6.4%;
+    background: rgba(40,39,57,.66);
+    color: #6ea8fb;
+    backdrop-filter: blur(10px);
+  }
+
+  /* Нижняя панель: чёрный блок от 75.3% до низа, плитки по 44.3% ширины. */
+  .dock {
+    top: 75.3%; left: 0; right: 0; bottom: 0;
+    background: #000;
+    border-radius: calc(var(--u) * 3.4) calc(var(--u) * 3.4) 0 0;
+  }
+  .tile {
+    position: absolute;
+    width: 44.3%;
+    padding: 1.6% 2.2%;
+    border-radius: calc(var(--u) * 2.2);
+    background: #1c1c1e;
+    font-size: calc(var(--u) * 1.72);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .tile.shop  { left: 4.1%; top: 9.5%;  height: 66.5%; }
+  .tile.coll  { left: 51.5%; top: 9.5%; height: 30%; }
+  .tile.stats { left: 51.5%; top: 43.5%; height: 32.5%; }
+  .tile .dot {
+    position: absolute;
+    top: 12%; right: 8%;
+    width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1);
+    border-radius: 50%;
+    background: #ff453a;
+  }
+  .homebar {
+    left: 50%; top: 98.5%;
+    transform: translateX(-50%);
+    width: 33.7%; height: .53%;
+    border-radius: 999px;
+    background: rgba(255,255,255,.92);
+  }
+
+
+  #panel {
+    flex: none;
+    width: 296px;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 18px;
+    background: #1d2026;
+    border: 1px solid #2e333c;
+    border-radius: 16px;
+  }
+  h2 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
+  .hint { margin: 0 0 16px; font-size: 12px; color: #9aa3af; }
+  .row { margin-bottom: 15px; }
+  .row > label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .row .val { color: #9aa3af; font-variant-numeric: tabular-nums; }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    background: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #363b44;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    margin-top: -7px;
+    border: none;
+    border-radius: 50%;
+    background: #e8eaed;
+  }
+  /* Выбор пресета: два ряда кнопок, активная подсвечена. */
+  #presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  #presets button {
+    min-height: 34px;
+    padding: 0 4px;
+    font-size: 12px;
+    line-height: 1.15;
+  }
+  #presets button .num { color: #6b7280; margin-right: 4px; }
+  #presets button.on {
+    background: #2f5fa8;
+    border-color: #3f7ad0;
+    color: #fff;
+  }
+  #presets button.on .num { color: #bcd4f5; }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 34px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .check input {
+    width: 17px; height: 17px;
+    margin: 0;
+    accent-color: #4f8ae0;
+    cursor: pointer;
+  }
+
+  #swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+  #swatches label { position: relative; }
+  input[type=color] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 44px; height: 44px;
+    padding: 0;
+    border: 1px solid #3d434d;
+    border-radius: 10px;
+    background: none;
+    cursor: pointer;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 7px; }
+  .actions { display: flex; gap: 8px; margin-top: 18px; }
+  button {
+    flex: 1;
+    min-height: 40px;
+    padding: 0 12px;
+    background: #24282f;
+    color: #e8eaed;
+    border: 1px solid #343a43;
+    border-radius: 9px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { background: #2b3038; }
+  button:active { background: #31373f; }
+  hr { margin: 18px 0; border: none; border-top: 1px solid #2e333c; }
+  @media (max-width: 780px) {
+    body { flex-direction: column; gap: 20px; }
+    #phone { height: 62vh; }
+    #panel { width: 100%; max-width: 420px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="phone">
+  <canvas id="canvas"></canvas>
+  <div id="notch"></div>
+
+  <div id="ui">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span class="icons">
+        <span class="bar" style="height:.45em"></span>
+        <span class="bar" style="height:.65em"></span>
+        <span class="bar" style="height:.85em"></span>
+        <span class="bar" style="height:1.05em"></span>
+        <span style="margin-left:.35em">&#9683;</span>
+        <span style="margin-left:.2em">&#9635;</span>
+      </span>
+    </div>
+
+    <span class="link">Закрыть</span>
+    <div class="coins"><span class="coin"></span>320</div>
+
+    <div class="bug">&#128027; Сообщить о баге</div>
+    <div class="help">?</div>
+
+    <img class="logo" src="img/header picture.png" alt="Арена карт">
+    <p class="tagline">Собирайте колоду и сражайтесь<br>с другими игроками</p>
+    <div class="cta primary">Найти матч</div>
+    <div class="cta ghost">Тренироваться</div>
+
+    <div class="dock">
+      <div class="tile shop">Магазин<br>карт<span class="dot"></span></div>
+      <div class="tile coll">Коллекция<br>карт</div>
+      <div class="tile stats">Статистика</div>
+    </div>
+    <div class="homebar"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <h2>Настройки фона</h2>
+  <p class="hint">Меняется сразу. Сброс и обмен настройками — внизу.</p>
+
+  <div id="presets"></div>
+
+  <div class="row">
+    <label>Скорость <span class="val" id="v-speed"></span></label>
+    <input type="range" id="speed" min="0" max="1000" value="258">
+  </div>
+
+  <div class="row">
+    <label>Сила перелива <span class="val" id="v-warp"></span></label>
+    <input type="range" id="warp" min="0" max="200" value="100">
+  </div>
+
+  <div class="row">
+    <label>Размер пятен <span class="val" id="v-scale"></span></label>
+    <input type="range" id="scale" min="50" max="200" value="100">
+  </div>
+
+  <div class="row">
+    <label>Яркость <span class="val" id="v-bright"></span></label>
+    <input type="range" id="bright" min="40" max="160" value="100">
+  </div>
+
+  <div class="row" id="row-edge">
+    <label>Резкость кромки <span class="val" id="v-edge"></span></label>
+    <input type="range" id="edge" min="0" max="100" value="35">
+  </div>
+
+  <div class="row">
+    <label>Зерно <span class="val" id="v-grain"></span></label>
+    <input type="range" id="grain" min="0" max="300" value="100">
+  </div>
+
+  <label class="check">
+    <input type="checkbox" id="spark">
+    <span>Искры</span>
+  </label>
+
+  <hr>
+
+  <div class="row">
+    <label>Цветов в градиенте <span class="val" id="v-count"></span></label>
+    <input type="range" id="count" min="2" max="6" value="4">
+  </div>
+
+  <div class="row">
+    <label>Цвета</label>
+    <div id="swatches"></div>
+  </div>
+
+  <div class="actions">
+    <button id="toggleUi">Скрыть интерфейс</button>
+  </div>
+
+  <div class="actions">
+    <button id="preset">Сброс</button>
+    <button id="shuffle">Случайно</button>
+  </div>
+
+  <div class="actions">
+    <button id="save">Сохранить JSON</button>
+    <button id="copy">Скопировать</button>
+  </div>
+  <div class="actions">
+    <button id="load">Загрузить JSON</button>
+    <button id="paste">Вставить</button>
+  </div>
+  <input type="file" id="file" accept=".json,application/json" hidden>
+  <p class="hint" id="saved" style="margin:10px 0 0"></p>
+</div>
+
+<script id="vert" type="x-shader/x-vertex">
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+</script>
+
+<script id="frag" type="x-shader/x-fragment">
+precision highp float;
+
+uniform vec2  uRes;
+uniform float uTime;
+uniform float uWarp;    // сила перелива
+uniform float uScale;   // размер пятен
+uniform float uBright;  // яркость
+uniform float uGrain;   // зерно
+uniform int   uCount;   // сколько цветов участвует
+uniform vec3  uCol[6];
+uniform int   uMode;    // 0 — мягкие пятна, 1 — ленты, 2 — диагонали
+uniform float uSpark;   // яркость слоя искр, 0 — выключен
+uniform float uEdge;    // резкость кромки в режимах 1 и 2
+uniform float uWall;    // время «по часам»: искры не зависят от скорости фона
+
+// --- Плавный шум на основе value noise -------------------------------
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);   // сглаживание, чтобы не было решётки
+  float a = hash2(i               ).x;
+  float b = hash2(i + vec2(1., 0.)).x;
+  float c = hash2(i + vec2(0., 1.)).x;
+  float d = hash2(i + vec2(1., 1.)).x;
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Два слоя шума — крупный держит форму, мелкий даёт неровность края.
+float fbm(vec2 p) {
+  return noise(p) * 0.65 + noise(p * 2.17 + 4.2) * 0.35;
+}
+
+// Дизеринг: рвёт видимые ступеньки на тёмных градиентах.
+float dither(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+}
+
+// --- Режим 0: мягкие пятна -------------------------------------------
+// Поле искажает само себя (domain warping), поэтому пятна текут и меняют
+// форму, а не ездят по кругу. Ни направления, ни кромки — мягкий туман.
+float fieldBlobs(vec2 p, float t) {
+  vec2 q = vec2(fbm(p + vec2(0.0, t * 0.11)),
+                fbm(p + vec2(3.7, -t * 0.09) + 1.3));
+  vec2 r = vec2(fbm(p + q * uWarp + vec2(t * 0.07, 1.9)),
+                fbm(p + q * uWarp + vec2(-1.4, -t * 0.06)));
+  // Шум держится около 0.5, поэтому растягиваем диапазон, иначе крайние
+  // цвета почти не появляются. Смещение вниз оставляет тёмному больше места.
+  float f = fbm(p + r * uWarp);
+  return clamp((f - 0.5) * 2.0 + 0.32, 0.0, 1.0);
+}
+
+// --- Режим 1: закрученные ленты --------------------------------------
+// Здесь важно не значение шума, а его градиент: он задаёт направление
+// течения. Закручиваем координату вдоль этого направления — получаются
+// ленты. Кромка возникает из-за сжатия поля поперёк потока: uEdge тем
+// выше, чем резче нужен край (реф-03 против 01–02).
+float fieldRibbons(vec2 p, float t) {
+  vec2 e = vec2(0.055, 0.0);
+  for (int i = 0; i < 3; i++) {
+    // Градиент шума = перпендикуляр к линии уровня, то есть поток.
+    float nx = fbm(p + e.xy + vec2(0.0, t * 0.05)) - fbm(p - e.xy + vec2(0.0, t * 0.05));
+    float ny = fbm(p + e.yx + vec2(t * 0.04, 0.0)) - fbm(p - e.yx + vec2(t * 0.04, 0.0));
+    // Поворот на 90 градусов превращает градиент в направление вихря.
+    p += vec2(-ny, nx) * uWarp * 1.5;
+  }
+  float f = fbm(p * 0.85 + vec2(t * 0.03, -t * 0.05));
+  // Сжатие вокруг середины: чем больше uEdge, тем тоньше переход и
+  // отчётливее край ленты. Смещение растёт вместе с растяжкой, иначе
+  // тёмное съедает кадр целиком.
+  f = (f - 0.5) * (1.6 + uEdge * 1.4) + (0.34 + uEdge * 0.08);
+  return clamp(f, 0.0, 1.0);
+}
+
+// --- Режим 2: диагональные полосы ------------------------------------
+// Прямые широкие полосы под 45 градусов, мягко искажённые шумом. Без
+// закрутки: направление одно на весь кадр, как в реф-04.
+float fieldDiagonal(vec2 p, float t) {
+  // Проекция на диагональ задаёт саму полосатость.
+  float d = (p.x * 0.72 + p.y * 0.69);
+  // Шум только сдвигает полосы, не ломая их направления.
+  float wobble = fbm(p * 0.55 + vec2(t * 0.05, -t * 0.04)) - 0.5;
+  float f = d * 0.85 + wobble * (0.5 + uWarp * 2.2);
+  f = fract(f * 0.5);            // повтор, чтобы полосы шли по всему кадру
+  f = abs(f - 0.5) * 2.0;        // треугольная волна: без стыка между копиями
+  // Степень 2.5 отдаёт тёмному больше половины кадра, как в референсе;
+  // множитель ограничивает верхушку, чтобы яркое не выжигалось в плоское.
+  f = pow(f, 2.5) * (0.75 + uEdge * 0.35);
+  return clamp(f, 0.0, 1.0);
+}
+
+// --- Искры ------------------------------------------------------------
+// Редкие мелкие точки. Сетка ячеек, в каждой не больше одной искры со
+// своей фазой — иначе они мигают в такт, и это сразу читается как узор.
+float sparkles(vec2 uv, float t) {
+  float sum = 0.0;
+  vec2 g = uv * vec2(3.5, 3.5 * uRes.y / uRes.x);   // ячейки примерно квадратные
+  vec2 cell = floor(g);
+  vec2 f = fract(g);
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec2 c = cell + vec2(float(dx), float(dy));
+      vec2 h = hash2(c);
+      // Почти все ячейки пустые: на референсах видно 2-4 искры на экран,
+      // а не россыпь. Порог 0.84 даёт примерно столько.
+      if (h.x < 0.84) continue;
+      vec2 pos = vec2(h.y, fract(h.x * 7.31));
+      float d = length(f - vec2(float(dx), float(dy)) - pos);
+      // Мигание своей фазой и своим темпом, медленное.
+      float ph = fract(h.x * 3.17 + h.y * 5.71);
+      float tw = 0.5 + 0.5 * sin((t * 0.55 + ph) * 6.2831);
+      tw = pow(tw, 3.0);                     // короткая вспышка, долгая пауза
+      // Резкий спад: ядро точки плюс едва заметный ореол.
+      float core = exp(-d * d * 4200.0);
+      float halo = exp(-d * d * 380.0) * 0.22;
+      sum += (core + halo) * tw;
+    }
+  }
+  return sum;
+}
+
+void main() {
+  // Координаты 0..1, с поправкой на вытянутость экрана.
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 p  = uv;
+  p.y *= uRes.y / uRes.x;
+  // Больше uScale — крупнее пятна, значит частота ниже. Множитель 1.6
+  // задаёт исходный масштаб: пара пятен на портретный экран.
+  p *= 1.6 / uScale;
+
+  float t = uTime;
+
+  // Способ рисования выбирает пресет.
+  float f;
+  if (uMode == 1)      f = fieldRibbons(p, t);
+  else if (uMode == 2) f = fieldDiagonal(p, t);
+  else                 f = fieldBlobs(p, t);
+
+  // Плавный переход по списку цветов: soft-min по расстоянию до стопа.
+  float n = float(uCount);
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+  for (int i = 0; i < 6; i++) {
+    if (i >= uCount) break;
+    float stop = float(i) / max(n - 1.0, 1.0);
+    float d = abs(f - stop);
+    // Ширина влияния зависит от числа стопов — переходы остаются мягкими.
+    float w = exp(-d * d * (n * n) * 2.2);
+    acc += uCol[i] * w;
+    wsum += w;
+  }
+  vec3 col = acc / max(wsum, 0.0001);
+
+  col *= uBright;
+
+  // Лёгкое затемнение к низу — как в референсе.
+  col *= 1.0 - 0.22 * pow(1.0 - uv.y, 2.5);
+
+  // Обратно в sRGB: смешивали в линейном, показываем в экранном.
+  col = pow(max(col, 0.0), vec3(1.0 / 2.2));
+
+  // Искры — уже в экранном пространстве: это блики поверх картинки, а не
+  // часть градиента, поэтому просто добавляются к цвету.
+  if (uSpark > 0.0) {
+    float s = sparkles(uv, uWall);
+    // Чуть холодный оттенок, как на референсах.
+    col += vec3(0.93, 0.95, 1.0) * s * uSpark;
+  }
+
+  // Зерно поверх, плюс дизеринг против полос.
+  float g = (fract(sin(dot(gl_FragCoord.xy, vec2(12.99, 78.23))) * 43758.55) - 0.5);
+  col += g * uGrain;
+  col += dither(gl_FragCoord.xy) / 255.0;
+
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById("canvas");
+const gl = canvas.getContext("webgl", { antialias: false, alpha: false });
+
+if (!gl) {
+  document.getElementById("panel").insertAdjacentHTML("afterbegin",
+    "<p style=\"color:#ff9f5a\">WebGL недоступен в этом браузере.</p>");
+  throw new Error("no webgl");
+}
+
+// Пять пресетов. Палитры сняты пробами из референсов в img/ — цвета
+// отсортированы от тёмного к светлому, шейдер раскладывает их по полю.
+// mode: 0 — мягкие пятна, 1 — закрученные ленты, 2 — диагональные полосы.
+// edge — резкость кромки (для режима 0 не используется).
+const PRESETS = [
+  {
+    name: "Туман",
+    mode: 0, edge: 0,
+    speed: 258, warp: 100, scale: 100, bright: 100, grain: 100, spark: false,
+    colors: ["#0d1020", "#232a4d", "#7b3fc4", "#c49bc8"],
+  },
+  {
+    name: "Лента",
+    mode: 1, edge: 35,
+    speed: 258, warp: 95, scale: 115, bright: 100, grain: 100, spark: true,
+    colors: ["#050209", "#1a0f33", "#392093", "#633581", "#e58dd7", "#ffb958"],
+  },
+  {
+    name: "Холод",
+    mode: 1, edge: 30,
+    speed: 240, warp: 90, scale: 120, bright: 100, grain: 100, spark: true,
+    colors: ["#050209", "#150b28", "#2c2181", "#593a8d", "#ca86cc", "#f2cf57"],
+  },
+  {
+    name: "Кислота",
+    mode: 1, edge: 85,
+    speed: 270, warp: 115, scale: 105, bright: 105, grain: 100, spark: true,
+    colors: ["#050209", "#472493", "#5424a0", "#d94199", "#e5f190", "#f7e30b"],
+  },
+  {
+    name: "Диагонали",
+    mode: 2, edge: 45,
+    speed: 250, warp: 70, scale: 130, bright: 100, grain: 100, spark: false,
+    colors: ["#050209", "#2a1550", "#62429c", "#a230a5", "#cb1e61", "#ffb347"],
+  },
+];
+
+const MAX_COLORS = 6;
+
+// Живое состояние каждого слота: правки не теряются при переключении.
+const slots = PRESETS.map(p => ({
+  mode: p.mode, edge: p.edge, spark: p.spark,
+  speed: p.speed, warp: p.warp, scale: p.scale,
+  bright: p.bright, grain: p.grain,
+  colors: p.colors.slice(),
+}));
+let active = 0;
+let colors = slots[0].colors;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById("vert").textContent));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById("frag").textContent));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+  throw new Error(gl.getProgramInfoLog(prog));
+}
+gl.useProgram(prog);
+
+// Один прямоугольник на весь экран.
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, "aPos");
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+for (const n of ["uRes","uTime","uWarp","uScale","uBright","uGrain","uCount",
+                 "uMode","uSpark","uEdge","uWall"]) {
+  U[n] = gl.getUniformLocation(prog, n);
+}
+const uColLoc = [];
+for (let i = 0; i < MAX_COLORS; i++) {
+  uColLoc.push(gl.getUniformLocation(prog, "uCol[" + i + "]"));
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  // sRGB -> линейное: без этого смешение цветов выглядит грязным.
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]
+    .map(c => Math.pow(c, 2.2));
+}
+
+const S = {};
+for (const id of ["speed","warp","scale","bright","grain","count","edge"]) {
+  S[id] = document.getElementById(id);
+}
+const sparkBox = document.getElementById("spark");
+
+// --- Слоты пресетов ---------------------------------------------------
+// Ползунки — единственный источник правды для активного слота. Перед
+// уходом на другой слот значения складываются обратно в него.
+function saveSlot() {
+  const s = slots[active];
+  s.speed  = +S.speed.value;
+  s.warp   = +S.warp.value;
+  s.scale  = +S.scale.value;
+  s.bright = +S.bright.value;
+  s.grain  = +S.grain.value;
+  s.edge   = +S.edge.value;
+  s.spark  = sparkBox.checked;
+  s.colors = colors.slice(0, +S.count.value);
+}
+
+function loadSlot(i) {
+  active = i;
+  const s = slots[i];
+  S.speed.value  = s.speed;
+  S.warp.value   = s.warp;
+  S.scale.value  = s.scale;
+  S.bright.value = s.bright;
+  S.grain.value  = s.grain;
+  S.edge.value   = s.edge;
+  S.count.value  = s.colors.length;
+  sparkBox.checked = s.spark;
+  colors = s.colors.slice();
+  buildSwatches();
+  showValues();
+  markPresetButtons();
+  // Режим лент и диагоналей регулируется кромкой, мягкие пятна — нет.
+  document.getElementById("row-edge").style.display =
+    s.mode === 0 ? "none" : "";
+}
+
+// Ползунок скорости нелинейный: 0..15x на кубической кривой. Иначе рабочая
+// зона «почти незаметно» (0.3..2x) сжимается в первые проценты хода.
+const SPEED_MAX = 15;
+function speedMul() {
+  const u = +S.speed.value / 1000;
+  return u * u * SPEED_MAX;
+}
+const swatchBox = document.getElementById("swatches");
+
+// Поля цвета: их столько, сколько выбрано ползунком.
+function buildSwatches() {
+  const n = +S.count.value;
+  swatchBox.textContent = "";
+  for (let i = 0; i < n; i++) {
+    // Заполняем пропуски сразу: иначе новый стоп виден на экране серым,
+    // а в выгрузке его нет.
+    if (!colors[i]) colors[i] = "#404040";
+    const inp = document.createElement("input");
+    inp.type = "color";
+    inp.value = colors[i];
+    inp.addEventListener("input", () => { colors[i] = inp.value; });
+    swatchBox.appendChild(inp);
+  }
+}
+
+// Кнопки выбора пресета.
+const presetBox = document.getElementById("presets");
+const presetBtns = PRESETS.map((p, i) => {
+  const b = document.createElement("button");
+  b.innerHTML = '<span class="num">' + (i + 1) + '</span>' + p.name;
+  b.addEventListener("click", () => {
+    if (i === active) return;
+    saveSlot();
+    loadSlot(i);
+  });
+  presetBox.appendChild(b);
+  return b;
+});
+
+function markPresetButtons() {
+  presetBtns.forEach((b, i) => b.classList.toggle("on", i === active));
+}
+
+function showValues() {
+  const m = speedMul();
+  document.getElementById("v-speed").textContent =
+    (m === 0 ? "стоп" : (m < 1 ? m.toFixed(2) : m.toFixed(1)) + "x");
+  document.getElementById("v-warp").textContent   = (+S.warp.value / 100).toFixed(2);
+  document.getElementById("v-scale").textContent  = (+S.scale.value / 100).toFixed(2);
+  document.getElementById("v-bright").textContent = (+S.bright.value / 100).toFixed(2);
+  document.getElementById("v-grain").textContent  = (+S.grain.value / 100).toFixed(2);
+  document.getElementById("v-count").textContent  = S.count.value;
+  document.getElementById("v-edge").textContent   = (+S.edge.value / 100).toFixed(2);
+}
+
+S.count.addEventListener("input", () => { buildSwatches(); showValues(); });
+for (const id of ["speed","warp","scale","bright","grain","edge"]) {
+  S[id].addEventListener("input", showValues);
+}
+
+// Сброс возвращает к исходному только активный пресет, остальные не трогает.
+document.getElementById("preset").addEventListener("click", () => {
+  const p = PRESETS[active];
+  slots[active] = {
+    mode: p.mode, edge: p.edge, spark: p.spark,
+    speed: p.speed, warp: p.warp, scale: p.scale,
+    bright: p.bright, grain: p.grain,
+    colors: p.colors.slice(),
+  };
+  loadSlot(active);
+});
+
+// Случайная палитра: тёмная база + один-два ярких акцента, как в референсе.
+document.getElementById("shuffle").addEventListener("click", () => {
+  const base = Math.random() * 360;
+  const n = +S.count.value;
+  colors = Array.from({ length: n }, (_, i) => {
+    const h = (base + i * (25 + Math.random() * 40)) % 360;
+    const l = 8 + (i / Math.max(n - 1, 1)) * 62;
+    const s = 35 + Math.random() * 45;
+    return hslToHex(h, s, l);
+  });
+  buildSwatches();
+});
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const to = v => Math.round(v * 255).toString(16).padStart(2, "0");
+  return "#" + to(f(0)) + to(f(8)) + to(f(4));
+}
+
+// --- Выгрузка параметров ---------------------------------------------
+// Складываем осмысленные значения, а не позиции ползунков: разработчику
+// нужны множители, которые уходят в шейдер, плюс константы, без которых
+// картинку не повторить.
+const MODE_NAMES = ["softBlobs", "ribbons", "diagonalBands"];
+
+// Один пресет в виде значений, уходящих в шейдер.
+function presetConfig(s, i) {
+  const speed = (s.speed / 1000) * (s.speed / 1000) * SPEED_MAX;
+  return {
+    index: i + 1,
+    name: PRESETS[i].name,
+    mode: MODE_NAMES[s.mode] || "softBlobs",
+    animation: {
+      speed: +speed.toFixed(2),                 // множитель темпа, 0..15
+      cycleSeconds: speed > 0                   // за столько обновляется картина
+        ? +(1 / (0.25 * speed * 0.11)).toFixed(1)
+        : null,
+    },
+    look: {
+      warp: +((s.warp / 100) * 0.55).toFixed(4),      // uWarp
+      scale: +(s.scale / 100).toFixed(3),             // uScale
+      brightness: +(s.bright / 100).toFixed(3),       // uBright
+      grain: +((s.grain / 100) * 0.05).toFixed(4),    // uGrain
+      edge: +(s.edge / 100).toFixed(3),               // uEdge, кромка
+      sparkles: s.spark,
+    },
+    gradient: {
+      count: s.colors.length,
+      colors: s.colors.slice(),
+    },
+  };
+}
+
+function config() {
+  saveSlot();     // на диск уходит то, что сейчас на ползунках
+  return {
+    _: "Библиотека градиентов. Экспорт из shaders/index.html",
+    activePreset: active + 1,
+    presets: slots.map(presetConfig),
+    shaderConstants: {
+      timeStep: 0.25,              // t += dt * speed * 0.25
+      baseFrequency: 1.6,          // p *= baseFrequency / uScale
+      bottomFade: 0.22,            // затемнение к низу, степень 2.5
+      colorSpace: "смешение в линейном (gamma 2.2), вывод в sRGB",
+      falloff: "exp(-d*d*count*count*2.2) по расстоянию до стопа",
+      softBlobs: "domain warping в 2 прохода; f = (fbm - .5) * 2 + .32",
+      ribbons: "3 прохода закрутки по градиенту шума, повёрнутому на 90°; " +
+               "f = (fbm - .5) * (1.6 + edge * 1.4) + (.34 + edge * .08)",
+      diagonalBands: "проекция на диагональ (.72, .69), треугольная волна, " +
+                     "f = pow(tri, 2.5) * (.75 + edge * .35)",
+      sparkles: "сетка 3.5 ячейки, порог .84 (2-4 искры на экран), " +
+                "мигание по времени независимо от скорости фона",
+    },
+    screen: { aspect: "9:19.5", orientation: "portrait", maxPixelRatio: 2 },
+  };
+}
+
+const saved = document.getElementById("saved");
+let savedTimer;
+function flash(msg) {
+  saved.textContent = msg;
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => { saved.textContent = ""; }, 3200);
+}
+
+// --- Загрузка параметров ---------------------------------------------
+// Обратный перевод: в файле значения для шейдера, ползункам нужны их
+// внутренние единицы. Всё, чего в файле нет, остаётся как было.
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function clampTo(el, v) {
+  return Math.max(+el.min, Math.min(+el.max, Math.round(v)));
+}
+
+// Значения из файла кладём прямо в слот, минуя ползунки: так один вызов
+// восстанавливает любой из пяти пресетов, а не только активный.
+function applyToSlot(slot, block) {
+  const a = block.animation || {};
+  const l = block.look || {};
+  const g = block.gradient || {};
+  let touched = 0;
+
+  const lim = (el, v) => Math.max(+el.min, Math.min(+el.max, Math.round(v)));
+
+  if (typeof a.speed === "number") {
+    // speed = u^2 * 15  ->  u = sqrt(speed / 15)
+    slot.speed = lim(S.speed, Math.sqrt(Math.max(0, a.speed) / SPEED_MAX) * 1000);
+    touched++;
+  }
+  if (typeof l.warp === "number")       { slot.warp   = lim(S.warp,  l.warp / 0.55 * 100); touched++; }
+  if (typeof l.scale === "number")      { slot.scale  = lim(S.scale, l.scale * 100); touched++; }
+  if (typeof l.brightness === "number") { slot.bright = lim(S.bright, l.brightness * 100); touched++; }
+  if (typeof l.grain === "number")      { slot.grain  = lim(S.grain, l.grain / 0.05 * 100); touched++; }
+  if (typeof l.edge === "number")       { slot.edge   = lim(S.edge,  l.edge * 100); touched++; }
+  if (typeof l.sparkles === "boolean")  { slot.spark  = l.sparkles; touched++; }
+
+  const mi = MODE_NAMES.indexOf(block.mode);
+  if (mi >= 0) { slot.mode = mi; touched++; }
+
+  if (Array.isArray(g.colors) && g.colors.length) {
+    const list = g.colors.filter(c => typeof c === "string" && HEX.test(c.trim()))
+                         .map(c => c.trim().toLowerCase());
+    if (!list.length) throw new Error("цвета не распознаны, нужен формат #rrggbb");
+    // Число стопов берём по факту из списка цветов: count в файле может
+    // с ним расходиться, а на экране должно совпадать.
+    slot.colors = list.slice(0, MAX_COLORS);
+    touched++;
+  }
+  return touched;
+}
+
+function applyConfig(cfg) {
+  if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) {
+    throw new Error("это не файл настроек");
+  }
+
+  let touched = 0;
+
+  if (Array.isArray(cfg.presets) && cfg.presets.length) {
+    // Новый формат: библиотека целиком. Лишние пресеты игнорируем,
+    // недостающие оставляем как есть.
+    cfg.presets.slice(0, slots.length).forEach((block, i) => {
+      if (block && typeof block === "object") touched += applyToSlot(slots[i], block);
+    });
+    const ai = cfg.activePreset;
+    const target = (typeof ai === "number" && ai >= 1 && ai <= slots.length)
+      ? ai - 1 : active;
+    if (!touched) throw new Error("в пресетах нет знакомых параметров");
+    loadSlot(target);
+    return touched;
+  }
+
+  // Старый формат — один плоский набор, кладём в активный слот.
+  touched = applyToSlot(slots[active], cfg);
+  if (!touched) throw new Error("знакомых параметров в файле нет");
+  loadSlot(active);
+  return touched;
+}
+
+function loadText(text, source) {
+  let cfg;
+  try {
+    cfg = JSON.parse(text);
+  } catch {
+    flash("Не похоже на JSON — файл повреждён или скопирован не целиком.");
+    return;
+  }
+  try {
+    const n = applyConfig(cfg);
+    flash("Настройки применены (" + source + "), параметров: " + n + ".");
+  } catch (e) {
+    flash("Не применилось: " + e.message);
+  }
+}
+
+// Интерфейс поверх градиента можно убрать: иногда нужно посмотреть на
+// сам фон, иногда — оценить его в контексте экрана.
+const uiLayer = document.getElementById("ui");
+const toggleBtn = document.getElementById("toggleUi");
+toggleBtn.addEventListener("click", () => {
+  const hidden = uiLayer.style.display === "none";
+  uiLayer.style.display = hidden ? "" : "none";
+  toggleBtn.textContent = hidden ? "Скрыть интерфейс" : "Показать интерфейс";
+});
+
+const fileInput = document.getElementById("file");
+document.getElementById("load").addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => loadText(String(r.result), f.name);
+  r.onerror = () => flash("Файл не прочитался.");
+  r.readAsText(f);
+  fileInput.value = "";   // чтобы тот же файл можно было выбрать повторно
+});
+
+document.getElementById("paste").addEventListener("click", async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text.trim()) { flash("В буфере пусто."); return; }
+    loadText(text, "из буфера");
+  } catch {
+    flash("Браузер не дал прочитать буфер, нажми «Загрузить JSON».");
+  }
+});
+
+// Перетаскивание файла на экран телефона — самый короткий путь.
+const phone = document.getElementById("phone");
+for (const ev of ["dragover", "dragenter"]) {
+  phone.addEventListener(ev, e => {
+    e.preventDefault();
+    phone.style.boxShadow = "0 0 0 2px #5aa9ff, 0 30px 60px -20px rgba(0,0,0,.8)";
+  });
+}
+for (const ev of ["dragleave", "drop"]) {
+  phone.addEventListener(ev, () => { phone.style.boxShadow = ""; });
+}
+phone.addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => loadText(String(r.result), f.name);
+  r.readAsText(f);
+});
+
+document.getElementById("save").addEventListener("click", () => {
+  const json = JSON.stringify(config(), null, 2);
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "gradient-params.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  flash("Файл gradient-params.json — в загрузках.");
+});
+
+document.getElementById("copy").addEventListener("click", async () => {
+  const json = JSON.stringify(config(), null, 2);
+  try {
+    await navigator.clipboard.writeText(json);
+    flash("Параметры в буфере — можно вставлять.");
+  } catch {
+    flash("Браузер не дал доступ к буферу, нажми «Сохранить JSON».");
+  }
+});
+
+function resize() {
+  // Единица --u = 1% высоты экрана. Все кегли заданы через неё, поэтому
+  // текст масштабируется вместе с макетом, а не живёт своей жизнью.
+  const uh = canvas.clientHeight;
+  if (uh) uiLayer.style.setProperty("--u", (uh / 100) + "px");
+
+  // Ограничиваем плотность: на retina полноразмерный рендер тёмного
+  // градиента греет телефон без видимой пользы.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(canvas.clientWidth * dpr);
+  const h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+}
+
+let t = 0;
+let wall = 0;                        // время «по часам», для искр
+let last = performance.now();
+
+function frame(now) {
+  // Время копим сами: тогда ползунок скорости не дёргает картинку,
+  // а плавно меняет темп течения.
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  // 0.25 подобрано так, чтобы на 1.0x композиция обновлялась за ~36 сек:
+  // движение видно только при сравнении, а не при взгляде в упор.
+  t += dt * speedMul() * 0.25;
+  wall += dt;                        // искры мигают ровно, независимо от фона
+
+  resize();
+
+  gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  gl.uniform1f(U.uTime, t);
+  gl.uniform1f(U.uWall, wall);
+  gl.uniform1f(U.uWarp, (+S.warp.value / 100) * 0.55);
+  gl.uniform1f(U.uScale, +S.scale.value / 100);
+  gl.uniform1f(U.uBright, +S.bright.value / 100);
+  gl.uniform1f(U.uGrain, (+S.grain.value / 100) * 0.05);
+  gl.uniform1i(U.uCount, +S.count.value);
+  gl.uniform1i(U.uMode, slots[active].mode);
+  gl.uniform1f(U.uEdge, +S.edge.value / 100);
+  gl.uniform1f(U.uSpark, sparkBox.checked ? 0.85 : 0.0);
+  for (let i = 0; i < +S.count.value; i++) {
+    gl.uniform3fv(uColLoc[i], hexToRgb(colors[i] || "#404040"));
+  }
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(frame);
+}
+
+loadSlot(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
