@@ -59,21 +59,31 @@
     border: 1px solid #2e333c;
     border-radius: 16px;
   }
-  h2 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
   .hint { margin: 0 0 16px; font-size: 12px; color: #9aa3af; }
-  .row { margin-bottom: 15px; }
-  .row > label {
+  /* Компактная строка: короткая подпись слева, ползунок посередине, число справа. */
+  .row {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
-    font-size: 13px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
   }
-  .row .val { color: #9aa3af; font-variant-numeric: tabular-nums; }
+  .row > label {
+    flex: 0 0 78px;
+    font-size: 12px;
+    color: #9aa3af;
+  }
+  .row .val {
+    flex: 0 0 30px;
+    text-align: right;
+    font-size: 12px;
+    color: #9aa3af;
+    font-variant-numeric: tabular-nums;
+  }
   input[type=range] {
     -webkit-appearance: none;
     appearance: none;
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     height: 22px;
     background: none;
     cursor: pointer;
@@ -91,26 +101,20 @@
     border-radius: 50%;
     background: #e8eaed;
   }
-  /* Выбор пресета: два ряда кнопок, активная подсвечена. */
+  /* Выбор пресета: обычный системный select, без своего дизайна. */
   #presets {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 18px;
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    margin-bottom: 16px;
+    background: #24282f;
+    color: #e8eaed;
+    border: 1px solid #343a43;
+    border-radius: 9px;
+    font: inherit;
+    cursor: pointer;
   }
-  #presets button {
-    min-height: 34px;
-    padding: 0 4px;
-    font-size: 12px;
-    line-height: 1.15;
-  }
-  #presets button .num { color: #6b7280; margin-right: 4px; }
-  #presets button.on {
-    background: #2f5fa8;
-    border-color: #3f7ad0;
-    color: #fff;
-  }
-  #presets button.on .num { color: #bcd4f5; }
 
   .check {
     display: flex;
@@ -128,20 +132,20 @@
     cursor: pointer;
   }
 
-  #swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+  #swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px; }
   #swatches label { position: relative; }
   input[type=color] {
     -webkit-appearance: none;
     appearance: none;
-    width: 44px; height: 44px;
+    width: 22px; height: 22px;
     padding: 0;
     border: 1px solid #3d434d;
-    border-radius: 10px;
+    border-radius: 6px;
     background: none;
     cursor: pointer;
   }
-  input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
-  input[type=color]::-webkit-color-swatch { border: none; border-radius: 7px; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
   .actions { display: flex; gap: 8px; margin-top: 18px; }
   button {
     flex: 1;
@@ -172,39 +176,42 @@
 </div>
 
 <div id="panel">
-  <h2>Настройки фона</h2>
-  <p class="hint">Меняется сразу. Сброс и обмен настройками — внизу.</p>
-
-  <div id="presets"></div>
+  <select id="presets"></select>
 
   <div class="row">
-    <label>Скорость <span class="val" id="v-speed"></span></label>
+    <label>Скорость</label>
     <input type="range" id="speed" min="0" max="1000" value="632">
+    <span class="val" id="v-speed"></span>
   </div>
 
   <div class="row">
-    <label>Сила перелива <span class="val" id="v-warp"></span></label>
+    <label>Перелив</label>
     <input type="range" id="warp" min="0" max="200" value="100">
+    <span class="val" id="v-warp"></span>
   </div>
 
   <div class="row">
-    <label>Размер пятен <span class="val" id="v-scale"></span></label>
+    <label>Размер</label>
     <input type="range" id="scale" min="50" max="200" value="100">
+    <span class="val" id="v-scale"></span>
   </div>
 
   <div class="row">
-    <label>Яркость <span class="val" id="v-bright"></span></label>
+    <label>Яркость</label>
     <input type="range" id="bright" min="40" max="160" value="100">
+    <span class="val" id="v-bright"></span>
   </div>
 
   <div class="row" id="row-edge">
-    <label>Резкость кромки <span class="val" id="v-edge"></span></label>
+    <label>Кромка</label>
     <input type="range" id="edge" min="0" max="100" value="35">
+    <span class="val" id="v-edge"></span>
   </div>
 
   <div class="row">
-    <label>Зерно <span class="val" id="v-grain"></span></label>
+    <label>Зерно</label>
     <input type="range" id="grain" min="0" max="300" value="100">
+    <span class="val" id="v-grain"></span>
   </div>
 
   <label class="check">
@@ -213,36 +220,38 @@
   </label>
 
   <div class="row">
-    <label>Искры, количество <span class="val" id="v-sparkcount"></span></label>
+    <label>Количество</label>
     <input type="range" id="sparkcount" min="0" max="300" value="6">
+    <span class="val" id="v-sparkcount"></span>
   </div>
 
   <div class="row">
-    <label>Искры, размер <span class="val" id="v-sparksize"></span></label>
+    <label>Размер</label>
     <input type="range" id="sparksize" min="20" max="400" value="100">
+    <span class="val" id="v-sparksize"></span>
   </div>
 
   <div class="row">
-    <label>Искры, мерцание <span class="val" id="v-sparkspeed"></span></label>
+    <label>Мерцание</label>
     <input type="range" id="sparkspeed" min="10" max="500" value="100">
+    <span class="val" id="v-sparkspeed"></span>
   </div>
 
   <div class="row">
-    <label>Искры, прозрачность <span class="val" id="v-sparkopacity"></span></label>
+    <label>Прозрачность</label>
     <input type="range" id="sparkopacity" min="0" max="100" value="85">
+    <span class="val" id="v-sparkopacity"></span>
   </div>
 
   <hr>
 
   <div class="row">
-    <label>Цветов в градиенте <span class="val" id="v-count"></span></label>
+    <label>Цвета</label>
     <input type="range" id="count" min="2" max="6" value="4">
+    <span class="val" id="v-count"></span>
   </div>
 
-  <div class="row">
-    <label>Цвета</label>
-    <div id="swatches"></div>
-  </div>
+  <div id="swatches"></div>
 
   <div class="actions">
     <button id="preset">Сброс</button>
@@ -616,7 +625,7 @@ function loadSlot(i) {
   colors = s.colors.slice();
   buildSwatches();
   showValues();
-  markPresetButtons();
+  presetSelect.value = i;
   // Режим лент и диагоналей регулируется кромкой, мягкие пятна — нет.
   document.getElementById("row-edge").style.display =
     s.mode === 0 ? "none" : "";
@@ -647,23 +656,20 @@ function buildSwatches() {
   }
 }
 
-// Кнопки выбора пресета.
-const presetBox = document.getElementById("presets");
-const presetBtns = PRESETS.map((p, i) => {
-  const b = document.createElement("button");
-  b.innerHTML = '<span class="num">' + (i + 1) + '</span>' + p.name;
-  b.addEventListener("click", () => {
-    if (i === active) return;
-    saveSlot();
-    loadSlot(i);
-  });
-  presetBox.appendChild(b);
-  return b;
+// Выбор пресета — обычный select, список рисует сама система.
+const presetSelect = document.getElementById("presets");
+PRESETS.forEach((p, i) => {
+  const opt = document.createElement("option");
+  opt.value = i;
+  opt.textContent = p.name;
+  presetSelect.appendChild(opt);
 });
-
-function markPresetButtons() {
-  presetBtns.forEach((b, i) => b.classList.toggle("on", i === active));
-}
+presetSelect.addEventListener("change", () => {
+  const i = +presetSelect.value;
+  if (i === active) return;
+  saveSlot();
+  loadSlot(i);
+});
 
 function showValues() {
   const m = speedMul();
