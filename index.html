@@ -49,154 +49,6 @@
     z-index: 3;
   }
 
-  /* --- Интерфейс поверх градиента ----------------------------------
-     Всё позиционируется абсолютно в % от размера экрана — числа сняты
-     замером макета img/main design.png (786x1700). Поток с отступами тут
-     не подходит: он копит погрешность, и блоки уезжают от макета.
-     Кегли — в % от высоты экрана через переменную --u. */
-  #ui {
-    position: absolute;
-    inset: 5px;
-    border-radius: 37px;
-    overflow: hidden;
-    color: #fff;
-    pointer-events: none;
-    z-index: 2;
-    --u: 1px;               /* задаётся из JS: 1% высоты экрана */
-    font-size: calc(var(--u) * 1.9);
-  }
-  #ui > * { position: absolute; }
-
-  /* Статус-бар: 9:41 слева, индикаторы справа. */
-  .statusbar {
-    top: 1.7%; left: 8.7%; right: 5%;
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: calc(var(--u) * 1.85);
-    font-weight: 600;
-  }
-  .statusbar .icons { display: flex; gap: calc(var(--u) * .5); align-items: center; }
-  .bar { width: calc(var(--u) * .42); border-radius: 1px; background: #fff; }
-
-  /* Закрыть / монеты — одна строка, верх 6.6% высоты. */
-  .link {
-    top: 6.9%; left: 4.3%;
-    color: #3d8cf7;
-    font-size: calc(var(--u) * 1.86);
-    font-weight: 500;
-  }
-  .coins {
-    top: 6.6%; right: 3.7%;
-    width: 15.6%; height: 3.2%;
-    display: flex; align-items: center; justify-content: center;
-    gap: 4%;
-    border-radius: 999px;
-    background: rgba(44,44,46,.72);
-    font-size: calc(var(--u) * 1.8);
-    font-weight: 600;
-  }
-  .coin {
-    width: calc(var(--u) * 2.1); height: calc(var(--u) * 2.1);
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #ffd77a, #e8a33d 70%);
-  }
-
-  /* Пилюля бага и кружок «?» */
-  .bug {
-    top: 11.4%; left: 4.1%;
-    width: 38%; height: 3.5%;
-    display: flex; align-items: center; justify-content: center;
-    gap: 4%;
-    border-radius: 999px;
-    background: rgba(40,38,81,.78);
-    color: #3d8cf7;
-    font-size: calc(var(--u) * 1.55);
-    font-weight: 500;
-  }
-  .help {
-    top: 11.8%; right: 4.3%;
-    width: 5.7%; aspect-ratio: 1;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 50%;
-    background: rgba(220,220,227,.92);
-    color: #1c1c1e;
-    font-size: calc(var(--u) * 1.75);
-    font-weight: 700;
-  }
-
-  /* Логотип: видимая часть 50% ширины, верх 26.6%. В файле по краям
-     прозрачные поля (518 из 600 px), поэтому тег шире — 58%. */
-  .logo {
-    top: 25.5%; left: 50%;
-    transform: translateX(-50%);
-    width: 58%;
-    filter: drop-shadow(0 0 calc(var(--u) * 3) rgba(190,130,255,.3));
-  }
-
-  .tagline {
-    top: 40.8%; left: 8%; right: 8%;
-    margin: 0;
-    text-align: center;
-    font-size: calc(var(--u) * 1.73);
-    line-height: 1.45;
-    font-weight: 400;
-  }
-
-  /* Кнопки: ширина и высота из макета. */
-  .cta {
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex; align-items: center; justify-content: center;
-    border-radius: calc(var(--u) * 1.9);
-    font-size: calc(var(--u) * 1.8);
-    font-weight: 600;
-  }
-  .cta.primary {
-    top: 47.9%; width: 48.7%; height: 5.35%;
-    background: #ffdd2d;
-    color: #1a1a1a;
-  }
-  .cta.ghost {
-    top: 54.1%; width: 62.3%; height: 6.4%;
-    background: rgba(40,39,57,.66);
-    color: #6ea8fb;
-    backdrop-filter: blur(10px);
-  }
-
-  /* Нижняя панель: чёрный блок от 75.3% до низа, плитки по 44.3% ширины. */
-  .dock {
-    top: 75.3%; left: 0; right: 0; bottom: 0;
-    background: #000;
-    border-radius: calc(var(--u) * 3.4) calc(var(--u) * 3.4) 0 0;
-  }
-  .tile {
-    position: absolute;
-    width: 44.3%;
-    padding: 1.6% 2.2%;
-    border-radius: calc(var(--u) * 2.2);
-    background: #1c1c1e;
-    font-size: calc(var(--u) * 1.72);
-    font-weight: 600;
-    line-height: 1.3;
-  }
-  .tile.shop  { left: 4.1%; top: 9.5%;  height: 66.5%; }
-  .tile.coll  { left: 51.5%; top: 9.5%; height: 30%; }
-  .tile.stats { left: 51.5%; top: 43.5%; height: 32.5%; }
-  .tile .dot {
-    position: absolute;
-    top: 12%; right: 8%;
-    width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1);
-    border-radius: 50%;
-    background: #ff453a;
-  }
-  .homebar {
-    left: 50%; top: 98.5%;
-    transform: translateX(-50%);
-    width: 33.7%; height: .53%;
-    border-radius: 999px;
-    background: rgba(255,255,255,.92);
-  }
-
-
   #panel {
     flex: none;
     width: 296px;
@@ -317,38 +169,6 @@
 <div id="phone">
   <canvas id="canvas"></canvas>
   <div id="notch"></div>
-
-  <div id="ui">
-    <div class="statusbar">
-      <span>9:41</span>
-      <span class="icons">
-        <span class="bar" style="height:.45em"></span>
-        <span class="bar" style="height:.65em"></span>
-        <span class="bar" style="height:.85em"></span>
-        <span class="bar" style="height:1.05em"></span>
-        <span style="margin-left:.35em">&#9683;</span>
-        <span style="margin-left:.2em">&#9635;</span>
-      </span>
-    </div>
-
-    <span class="link">Закрыть</span>
-    <div class="coins"><span class="coin"></span>320</div>
-
-    <div class="bug">&#128027; Сообщить о баге</div>
-    <div class="help">?</div>
-
-    <img class="logo" src="img/header picture.png" alt="Арена карт">
-    <p class="tagline">Собирайте колоду и сражайтесь<br>с другими игроками</p>
-    <div class="cta primary">Найти матч</div>
-    <div class="cta ghost">Тренироваться</div>
-
-    <div class="dock">
-      <div class="tile shop">Магазин<br>карт<span class="dot"></span></div>
-      <div class="tile coll">Коллекция<br>карт</div>
-      <div class="tile stats">Статистика</div>
-    </div>
-    <div class="homebar"></div>
-  </div>
 </div>
 
 <div id="panel">
@@ -402,10 +222,6 @@
   <div class="row">
     <label>Цвета</label>
     <div id="swatches"></div>
-  </div>
-
-  <div class="actions">
-    <button id="toggleUi">Скрыть интерфейс</button>
   </div>
 
   <div class="actions">
@@ -1007,16 +823,6 @@ function loadText(text, source) {
   }
 }
 
-// Интерфейс поверх градиента можно убрать: иногда нужно посмотреть на
-// сам фон, иногда — оценить его в контексте экрана.
-const uiLayer = document.getElementById("ui");
-const toggleBtn = document.getElementById("toggleUi");
-toggleBtn.addEventListener("click", () => {
-  const hidden = uiLayer.style.display === "none";
-  uiLayer.style.display = hidden ? "" : "none";
-  toggleBtn.textContent = hidden ? "Скрыть интерфейс" : "Показать интерфейс";
-});
-
 const fileInput = document.getElementById("file");
 document.getElementById("load").addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
@@ -1081,11 +887,6 @@ document.getElementById("copy").addEventListener("click", async () => {
 });
 
 function resize() {
-  // Единица --u = 1% высоты экрана. Все кегли заданы через неё, поэтому
-  // текст масштабируется вместе с макетом, а не живёт своей жизнью.
-  const uh = canvas.clientHeight;
-  if (uh) uiLayer.style.setProperty("--u", (uh / 100) + "px");
-
   // Ограничиваем плотность: на retina полноразмерный рендер тёмного
   // градиента греет телефон без видимой пользы.
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
