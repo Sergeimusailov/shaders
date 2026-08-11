@@ -212,6 +212,11 @@
     <span>Искры</span>
   </label>
 
+  <div class="row">
+    <label>Искры, количество <span class="val" id="v-sparkcount"></span></label>
+    <input type="range" id="sparkcount" min="0" max="100" value="30">
+  </div>
+
   <hr>
 
   <div class="row">
@@ -258,7 +263,9 @@ uniform float uGrain;   // зерно
 uniform int   uCount;   // сколько цветов участвует
 uniform vec3  uCol[6];
 uniform int   uMode;    // 0 — мягкие пятна, 1 — ленты, 2 — диагонали
-uniform float uSpark;   // яркость слоя искр, 0 — выключен
+uniform float uSpark;      // яркость слоя искр, 0 — выключен
+uniform float uSparkThr;   // порог редкости искр — выше значит реже
+uniform float uSparkPx;    // uv-размер одного CSS-пикселя, для калибровки искр в px
 uniform float uEdge;    // резкость кромки в режимах 1 и 2
 uniform float uBase;    // базовый тон ленты — сколько кадра остаётся тёмным
 uniform float uWall;    // время «по часам»: искры не зависят от скорости фона
@@ -344,29 +351,36 @@ float fieldDiagonal(vec2 p, float t) {
 }
 
 // --- Искры ------------------------------------------------------------
-// Редкие мелкие точки. Сетка ячеек, в каждой не больше одной искры со
-// своей фазой — иначе они мигают в такт, и это сразу читается как узор.
+// Сетка ячеек, в каждой не больше одной искры со своей фазой — иначе они
+// мигают в такт, и это сразу читается как узор. Порог редкости берётся
+// со слайдера (uSparkThr), а вся сетка медленно едет по экрану (drift) —
+// так за минуту искры успевают смениться по всей площади, а не мигать
+// вечно в одних и тех же двух-трёх точках.
 float sparkles(vec2 uv, float t) {
   float sum = 0.0;
-  vec2 g = uv * vec2(3.5, 3.5 * uRes.y / uRes.x);   // ячейки примерно квадратные
+  vec2 drift = vec2(t * 0.045, -t * 0.03);
+  vec2 g = uv * vec2(3.5, 3.5 * uRes.y / uRes.x) + drift;
   vec2 cell = floor(g);
   vec2 f = fract(g);
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       vec2 c = cell + vec2(float(dx), float(dy));
       vec2 h = hash2(c);
-      // Почти все ячейки пустые: на референсах видно 2-4 искры на экран,
-      // а не россыпь. Порог 0.84 даёт примерно столько.
-      if (h.x < 0.84) continue;
+      if (h.x < uSparkThr) continue;
       vec2 pos = vec2(h.y, fract(h.x * 7.31));
       float d = length(f - vec2(float(dx), float(dy)) - pos);
       // Мигание своей фазой и своим темпом, медленное.
       float ph = fract(h.x * 3.17 + h.y * 5.71);
       float tw = 0.5 + 0.5 * sin((t * 0.55 + ph) * 6.2831);
       tw = pow(tw, 3.0);                     // короткая вспышка, долгая пауза
-      // Резкий спад: ядро точки плюс едва заметный ореол.
-      float core = exp(-d * d * 4200.0);
-      float halo = exp(-d * d * 380.0) * 0.22;
+      // Разброс размера: 2–5px радиуса (4–10px в диаметре), свой на ячейку.
+      vec2 hs = hash2(c + 17.0);
+      float rPx = mix(2.0, 5.0, hs.x);
+      float rUv = rPx * uSparkPx;
+      float dn = d / max(rUv, 0.0001);
+      // Резкий спад: ядро точки плюс едва заметный ореол, оба от размера.
+      float core = exp(-dn * dn * 3.2);
+      float halo = exp(-dn * dn * 0.7) * 0.22;
       sum += (core + halo) * tw;
     }
   }
@@ -448,31 +462,31 @@ const PRESETS = [
   {
     name: "Туман",
     mode: 0, edge: 0, base: 0.34,
-    speed: 258, warp: 100, scale: 100, bright: 100, grain: 100, spark: false,
+    speed: 258, warp: 100, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 30,
     colors: ["#0d1020", "#232a4d", "#7b3fc4", "#c49bc8"],
   },
   {
     name: "Лента",
     mode: 1, edge: 95, base: 0.14,
-    speed: 258, warp: 85, scale: 145, bright: 100, grain: 100, spark: true,
+    speed: 258, warp: 85, scale: 145, bright: 100, grain: 100, spark: true, sparkCount: 30,
     colors: ["#04030a", "#170f35", "#2f6fae", "#c94fb0", "#ff5d6c", "#ffc24d"],
   },
   {
     name: "Холод",
     mode: 1, edge: 30, base: 0.364,
-    speed: 240, warp: 90, scale: 120, bright: 100, grain: 100, spark: true,
+    speed: 240, warp: 90, scale: 120, bright: 100, grain: 100, spark: true, sparkCount: 30,
     colors: ["#050209", "#150b28", "#2c2181", "#593a8d", "#ca86cc", "#f2cf57"],
   },
   {
     name: "Кислота",
     mode: 1, edge: 85, base: 0.408,
-    speed: 270, warp: 115, scale: 105, bright: 105, grain: 100, spark: true,
+    speed: 270, warp: 115, scale: 105, bright: 105, grain: 100, spark: true, sparkCount: 30,
     colors: ["#050209", "#472493", "#5424a0", "#d94199", "#e5f190", "#f7e30b"],
   },
   {
     name: "Диагонали",
     mode: 2, edge: 45, base: 0.34,
-    speed: 250, warp: 70, scale: 130, bright: 100, grain: 100, spark: false,
+    speed: 250, warp: 70, scale: 130, bright: 100, grain: 100, spark: false, sparkCount: 30,
     colors: ["#050209", "#2a1550", "#62429c", "#a230a5", "#cb1e61", "#ffb347"],
   },
 ];
@@ -482,6 +496,7 @@ const MAX_COLORS = 6;
 // Живое состояние каждого слота: правки не теряются при переключении.
 const slots = PRESETS.map(p => ({
   mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
+  sparkCount: p.sparkCount,
   speed: p.speed, warp: p.warp, scale: p.scale,
   bright: p.bright, grain: p.grain,
   colors: p.colors.slice(),
@@ -518,7 +533,7 @@ gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
 const U = {};
 for (const n of ["uRes","uTime","uWarp","uScale","uBright","uGrain","uCount",
-                 "uMode","uSpark","uEdge","uBase","uWall"]) {
+                 "uMode","uSpark","uSparkThr","uSparkPx","uEdge","uBase","uWall"]) {
   U[n] = gl.getUniformLocation(prog, n);
 }
 const uColLoc = [];
@@ -534,7 +549,7 @@ function hexToRgb(hex) {
 }
 
 const S = {};
-for (const id of ["speed","warp","scale","bright","grain","count","edge"]) {
+for (const id of ["speed","warp","scale","bright","grain","count","edge","sparkcount"]) {
   S[id] = document.getElementById(id);
 }
 const sparkBox = document.getElementById("spark");
@@ -551,6 +566,7 @@ function saveSlot() {
   s.grain  = +S.grain.value;
   s.edge   = +S.edge.value;
   s.spark  = sparkBox.checked;
+  s.sparkCount = +S.sparkcount.value;
   s.colors = colors.slice(0, +S.count.value);
 }
 
@@ -564,6 +580,7 @@ function loadSlot(i) {
   S.grain.value  = s.grain;
   S.edge.value   = s.edge;
   S.count.value  = s.colors.length;
+  S.sparkcount.value = s.sparkCount;
   sparkBox.checked = s.spark;
   colors = s.colors.slice();
   buildSwatches();
@@ -627,10 +644,11 @@ function showValues() {
   document.getElementById("v-grain").textContent  = (+S.grain.value / 100).toFixed(2);
   document.getElementById("v-count").textContent  = S.count.value;
   document.getElementById("v-edge").textContent   = (+S.edge.value / 100).toFixed(2);
+  document.getElementById("v-sparkcount").textContent = S.sparkcount.value;
 }
 
 S.count.addEventListener("input", () => { buildSwatches(); showValues(); });
-for (const id of ["speed","warp","scale","bright","grain","edge"]) {
+for (const id of ["speed","warp","scale","bright","grain","edge","sparkcount"]) {
   S[id].addEventListener("input", showValues);
 }
 
@@ -639,6 +657,7 @@ document.getElementById("preset").addEventListener("click", () => {
   const p = PRESETS[active];
   slots[active] = {
     mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
+    sparkCount: p.sparkCount,
     speed: p.speed, warp: p.warp, scale: p.scale,
     bright: p.bright, grain: p.grain,
     colors: p.colors.slice(),
@@ -695,6 +714,7 @@ function presetConfig(s, i) {
       edge: +(s.edge / 100).toFixed(3),               // uEdge, кромка
       base: +s.base.toFixed(3),                       // uBase, базовый тон
       sparkles: s.spark,
+      sparklesCount: s.sparkCount,                    // 0..100, редкость искр
     },
     gradient: {
       count: s.colors.length,
@@ -720,7 +740,8 @@ function config() {
                "f = (fbm - .5) * (1.6 + edge * 1.4) + base",
       diagonalBands: "проекция на диагональ (.72, .69), треугольная волна, " +
                      "f = pow(tri, 2.5) * (.75 + edge * .35)",
-      sparkles: "сетка 3.5 ячейки, порог .84 (2-4 искры на экран), " +
+      sparkles: "сетка 3.5 ячейки, дрейфует по времени, редкость из sparklesCount " +
+                "(0..100 -> порог .97..0.55); размер 2-5px радиуса на ячейку; " +
                 "мигание по времени независимо от скорости фона",
     },
     screen: { aspect: "9:19.5", orientation: "portrait", maxPixelRatio: 2 },
@@ -766,6 +787,7 @@ function applyToSlot(slot, block) {
   if (typeof l.edge === "number")       { slot.edge   = lim(S.edge,  l.edge * 100); touched++; }
   if (typeof l.base === "number")       { slot.base   = Math.max(0, Math.min(1, l.base)); touched++; }
   if (typeof l.sparkles === "boolean")  { slot.spark  = l.sparkles; touched++; }
+  if (typeof l.sparklesCount === "number") { slot.sparkCount = lim(S.sparkcount, l.sparklesCount); touched++; }
 
   const mi = MODE_NAMES.indexOf(block.mode);
   if (mi >= 0) { slot.mode = mi; touched++; }
@@ -930,6 +952,10 @@ function frame(now) {
   gl.uniform1f(U.uEdge, +S.edge.value / 100);
   gl.uniform1f(U.uBase, slots[active].base);
   gl.uniform1f(U.uSpark, sparkBox.checked ? 0.85 : 0.0);
+  // Слайдер 0..100 -> порог редкости 0.97..0.55 (реже..чаще).
+  gl.uniform1f(U.uSparkThr, 0.97 - (+S.sparkcount.value / 100) * 0.42);
+  // uv на один CSS-пиксель: искры калибруются в px независимо от dpr.
+  gl.uniform1f(U.uSparkPx, canvas.clientWidth ? 1 / canvas.clientWidth : 0);
   for (let i = 0; i < +S.count.value; i++) {
     gl.uniform3fv(uColLoc[i], hexToRgb(colors[i] || "#404040"));
   }
