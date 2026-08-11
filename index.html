@@ -294,6 +294,9 @@ uniform float uSparkSize;  // коэффициент к базовому раз�
 uniform float uSparkSpeed; // коэффициент к скорости мерцания
 uniform float uEdge;    // резкость кромки в режимах 1 и 2
 uniform float uBase;    // базовый тон ленты — сколько кадра остаётся тёмным
+uniform float uRim;     // сила глянцевого блика вдоль ленты, 0 — выключен
+uniform float uRimPos;  // на каком значении поля сидит блик
+uniform float uRimWidth; // ширина блика по полю — чем меньше, тем тоньше линия
 uniform float uWall;    // время «по часам»: искры не зависят от скорости фона
 
 // --- Плавный шум на основе value noise -------------------------------
@@ -455,6 +458,16 @@ void main() {
   // Лёгкое затемнение к низу — как в референсе.
   col *= 1.0 - 0.22 * pow(1.0 - uv.y, 2.5);
 
+  // Глянцевый блик вдоль ленты: тонкая яркая линия там, где поле проходит
+  // через uRimPos (обычно — переход между двумя серединными цветами).
+  // В линейном пространстве вместе с остальным цветом, чтобы физически
+  // читалось как отражение на материале, а не блик поверх картинки.
+  if (uRim > 0.0) {
+    float rd = (f - uRimPos) / max(uRimWidth, 0.0001);
+    float rim = exp(-rd * rd);
+    col += vec3(1.0, 0.97, 1.0) * rim * uRim;
+  }
+
   // Обратно в sRGB: смешивали в линейном, показываем в экранном.
   col = pow(max(col, 0.0), vec3(1.0 / 2.2));
 
@@ -492,33 +505,39 @@ if (!gl) {
 const PRESETS = [
   {
     name: "Туман",
-    mode: 0, edge: 0, base: 0.34,
+    mode: 0, edge: 0, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05,
     speed: 632, warp: 100, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#0d1020", "#232a4d", "#7b3fc4", "#c49bc8"],
   },
   {
     name: "Лента",
-    mode: 1, edge: 95, base: 0.14,
+    mode: 1, edge: 95, base: 0.14, rim: 0, rimPos: 0.5, rimWidth: 0.05,
     speed: 632, warp: 85, scale: 145, bright: 100, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#04030a", "#170f35", "#2f6fae", "#c94fb0", "#ff5d6c", "#ffc24d"],
   },
   {
     name: "Холод",
-    mode: 1, edge: 30, base: 0.364,
+    mode: 1, edge: 30, base: 0.364, rim: 0, rimPos: 0.5, rimWidth: 0.05,
     speed: 588, warp: 90, scale: 120, bright: 100, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#150b28", "#2c2181", "#593a8d", "#ca86cc", "#f2cf57"],
   },
   {
     name: "Кислота",
-    mode: 1, edge: 85, base: 0.408,
+    mode: 1, edge: 85, base: 0.408, rim: 0, rimPos: 0.5, rimWidth: 0.05,
     speed: 661, warp: 115, scale: 105, bright: 105, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#472493", "#5424a0", "#d94199", "#e5f190", "#f7e30b"],
   },
   {
     name: "Диагонали",
-    mode: 2, edge: 45, base: 0.34,
+    mode: 2, edge: 45, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05,
     speed: 612, warp: 70, scale: 130, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#2a1550", "#62429c", "#a230a5", "#cb1e61", "#ffb347"],
+  },
+  {
+    name: "Нить",
+    mode: 1, edge: 80, base: 0.11, rim: 1.1, rimPos: 0.32, rimWidth: 0.025,
+    speed: 632, warp: 70, scale: 190, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
+    colors: ["#000000", "#020204", "#1c5fc9", "#7b2fd4", "#ff4d1f", "#ffb648"],
   },
 ];
 
@@ -527,6 +546,7 @@ const MAX_COLORS = 6;
 // Живое состояние каждого слота: правки не теряются при переключении.
 const slots = PRESETS.map(p => ({
   mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
+  rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth,
   sparkCount: p.sparkCount, sparkSize: p.sparkSize,
   sparkSpeed: p.sparkSpeed, sparkOpacity: p.sparkOpacity,
   speed: p.speed, warp: p.warp, scale: p.scale,
@@ -566,7 +586,7 @@ gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
 for (const n of ["uRes","uTime","uWarp","uScale","uBright","uGrain","uCount",
                  "uMode","uSpark","uSparkThr","uSparkPx","uSparkSize","uSparkSpeed",
-                 "uEdge","uBase","uWall"]) {
+                 "uEdge","uBase","uRim","uRimPos","uRimWidth","uWall"]) {
   U[n] = gl.getUniformLocation(prog, n);
 }
 const uColLoc = [];
@@ -698,8 +718,9 @@ document.getElementById("preset").addEventListener("click", () => {
   const p = PRESETS[active];
   slots[active] = {
     mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
+    rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth,
     sparkCount: p.sparkCount, sparkSize: p.sparkSize,
-  sparkSpeed: p.sparkSpeed, sparkOpacity: p.sparkOpacity,
+    sparkSpeed: p.sparkSpeed, sparkOpacity: p.sparkOpacity,
     speed: p.speed, warp: p.warp, scale: p.scale,
     bright: p.bright, grain: p.grain,
     colors: p.colors.slice(),
@@ -755,6 +776,9 @@ function presetConfig(s, i) {
       grain: +((s.grain / 100) * 0.05).toFixed(4),    // uGrain
       edge: +(s.edge / 100).toFixed(3),               // uEdge, кромка
       base: +s.base.toFixed(3),                       // uBase, базовый тон
+      rim: +s.rim.toFixed(3),                         // uRim, сила глянцевого блика
+      rimPos: +s.rimPos.toFixed(3),                   // uRimPos
+      rimWidth: +s.rimWidth.toFixed(4),                // uRimWidth
       sparkles: s.spark,
       sparklesCount: s.sparkCount,                    // 0..300, целевое число искр
       sparklesSize: +(s.sparkSize / 100).toFixed(3),        // uSparkSize
@@ -783,6 +807,8 @@ function config() {
       softBlobs: "domain warping в 2 прохода; f = (fbm - .5) * 2 + .32",
       ribbons: "3 прохода закрутки по градиенту шума, повёрнутому на 90°; " +
                "f = (fbm - .5) * (1.6 + edge * 1.4) + base",
+      rim: "глянцевый блик поверх ленты: rim * exp(-((f-rimPos)/rimWidth)^2), " +
+           "в линейном пространстве до гамма-коррекции, цвет (1, .97, 1)",
       diagonalBands: "проекция на диагональ (.72, .69), треугольная волна, " +
                      "f = pow(tri, 2.5) * (.75 + edge * .35)",
       sparkles: "сетка 16 ячеек в ширину, целиком перетасовывается каждые 2.4с " +
@@ -832,6 +858,9 @@ function applyToSlot(slot, block) {
   if (typeof l.grain === "number")      { slot.grain  = lim(S.grain, l.grain / 0.05 * 100); touched++; }
   if (typeof l.edge === "number")       { slot.edge   = lim(S.edge,  l.edge * 100); touched++; }
   if (typeof l.base === "number")       { slot.base   = Math.max(0, Math.min(1, l.base)); touched++; }
+  if (typeof l.rim === "number")        { slot.rim      = Math.max(0, l.rim); touched++; }
+  if (typeof l.rimPos === "number")     { slot.rimPos   = Math.max(0, Math.min(1, l.rimPos)); touched++; }
+  if (typeof l.rimWidth === "number")   { slot.rimWidth = Math.max(0.001, l.rimWidth); touched++; }
   if (typeof l.sparkles === "boolean")  { slot.spark  = l.sparkles; touched++; }
   if (typeof l.sparklesCount === "number") { slot.sparkCount = lim(S.sparkcount, l.sparklesCount); touched++; }
   if (typeof l.sparklesSize === "number") { slot.sparkSize = lim(S.sparksize, l.sparklesSize * 100); touched++; }
@@ -1000,6 +1029,9 @@ function frame(now) {
   gl.uniform1i(U.uMode, slots[active].mode);
   gl.uniform1f(U.uEdge, +S.edge.value / 100);
   gl.uniform1f(U.uBase, slots[active].base);
+  gl.uniform1f(U.uRim, slots[active].rim);
+  gl.uniform1f(U.uRimPos, slots[active].rimPos);
+  gl.uniform1f(U.uRimWidth, slots[active].rimWidth);
   gl.uniform1f(U.uSpark, sparkBox.checked ? +S.sparkopacity.value / 100 : 0.0);
   gl.uniform1f(U.uSparkSize, +S.sparksize.value / 100);
   gl.uniform1f(U.uSparkSpeed, +S.sparkspeed.value / 100);
