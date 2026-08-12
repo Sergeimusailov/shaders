@@ -243,6 +243,11 @@
     <span class="val" id="v-sparkopacity"></span>
   </div>
 
+  <div class="row">
+    <label>Блик</label>
+    <input type="color" id="accent" value="#ffffff">
+  </div>
+
   <hr>
 
   <div class="row">
@@ -297,6 +302,8 @@ uniform float uBase;    // базовый тон ленты — сколько �
 uniform float uRim;     // сила глянцевого блика вдоль ленты, 0 — выключен
 uniform float uRimPos;  // на каком значении поля сидит блик
 uniform float uRimWidth; // ширина блика по полю — чем меньше, тем тоньше линия
+uniform float uOrbPulse; // сила кольца-пульса, бегущего от центра к краю (режим 3)
+uniform vec3  uAccentCol; // цвет блика/пульса — из палитры, а не зашит в шейдер
 uniform float uWall;    // время «по часам»: искры не зависят от скорости фона
 
 // --- Плавный шум на основе value noise -------------------------------
@@ -379,6 +386,28 @@ float fieldDiagonal(vec2 p, float t) {
   return clamp(f, 0.0, 1.0);
 }
 
+// --- Режим 3: орб (медуза) ---------------------------------------------
+// Не поле шума, а радиальное свечение из центра: ближе к центру — ярче,
+// к краю — цвет остывает, дальше — растворяется в фоне. Контур не идеальный
+// круг — угловой шум слегка колышет радиус (используем силу перелива,
+// uWarp, как «на сколько колышется»), плюс медленное дыхание всей формы.
+// ndOut отдаём наружу — по нему в main() бежит кольцо-пульс от центра к краю.
+float fieldOrb(vec2 uv, float t, out float ndOut) {
+  vec2 c = vec2(0.5, 0.56);           // чуть ниже середины — блик внизу, как в референсе
+  vec2 dv = uv - c;
+  dv.y *= uRes.y / uRes.x;            // круг остаётся круглым на портретном экране
+  float ang = atan(dv.y, dv.x);
+  float wob = fbm(vec2(cos(ang), sin(ang)) * 1.7 + vec2(t * 0.05, -t * 0.04)) - 0.5;
+  float breathe = 1.0 + 0.05 * sin(t * 0.35);   // дыхание — вся форма мягко пульсирует
+  float radius = 0.34 * uScale * breathe * (1.0 + wob * uWarp);
+  float d = length(dv);
+  float nd = d / max(radius, 0.0001);
+  ndOut = nd;
+  // 2.0 — насколько за номинальный радиус тянется ореол, прежде чем уйти
+  // в чёрное; чем больше, тем мягче и дымчатее внешний край.
+  return 1.0 - nd / 2.0;
+}
+
 // --- Искры ------------------------------------------------------------
 // Мелкая сетка ячеек (SPARK_CELLS в ширину — с запасом под до 300 штук),
 // в каждой не больше одной искры со своей фазой — иначе они мигают в
@@ -434,8 +463,10 @@ void main() {
 
   // Способ рисования выбирает пресет.
   float f;
+  float orbNd = 0.0;
   if (uMode == 1)      f = fieldRibbons(p, t);
   else if (uMode == 2) f = fieldDiagonal(p, t);
+  else if (uMode == 3) f = fieldOrb(uv, t, orbNd);
   else                 f = fieldBlobs(p, t);
 
   // Плавный переход по списку цветов: soft-min по расстоянию до стопа.
@@ -465,7 +496,18 @@ void main() {
   if (uRim > 0.0) {
     float rd = (f - uRimPos) / max(uRimWidth, 0.0001);
     float rim = exp(-rd * rd);
-    col += vec3(1.0, 0.97, 1.0) * rim * uRim;
+    col += uAccentCol * rim * uRim;
+  }
+
+  // Едва заметное дыхание света, бегущее от центра к краю — не линии, а
+  // мягкая волна яркости. pow(cos, 8) вместо smoothstep даёт колоколообразный,
+  // размытый пик без жёсткой границы; cos периодичен сам по себе, поэтому
+  // зацикливается без скачка цвета.
+  if (uOrbPulse > 0.0) {
+    float wave = cos((orbNd * 1.4 - t * 0.07) * 6.2831) * 0.5 + 0.5;
+    float glow = pow(wave, 8.0);
+    float envelope = exp(-orbNd * orbNd * 1.3);
+    col += uAccentCol * glow * envelope * uOrbPulse;
   }
 
   // Обратно в sRGB: смешивали в линейном, показываем в экранном.
@@ -500,44 +542,51 @@ if (!gl) {
 
 // Пять пресетов. Палитры сняты пробами из референсов в img/ — цвета
 // отсортированы от тёмного к светлому, шейдер раскладывает их по полю.
-// mode: 0 — мягкие пятна, 1 — закрученные ленты, 2 — диагональные полосы.
+// mode: 0 — мягкие пятна, 1 — закрученные ленты, 2 — диагональные полосы,
+// 3 — орб (медуза): радиальное свечение из центра, не поле шума.
 // edge — резкость кромки (для режима 0 не используется).
 const PRESETS = [
   {
     name: "Туман",
-    mode: 0, edge: 0, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05,
+    mode: 0, edge: 0, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0, accent: "#ffffff",
     speed: 632, warp: 100, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#0d1020", "#232a4d", "#7b3fc4", "#c49bc8"],
   },
   {
     name: "Лента",
-    mode: 1, edge: 95, base: 0.14, rim: 0, rimPos: 0.5, rimWidth: 0.05,
+    mode: 1, edge: 95, base: 0.14, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0, accent: "#ffffff",
     speed: 632, warp: 85, scale: 145, bright: 100, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#04030a", "#170f35", "#2f6fae", "#c94fb0", "#ff5d6c", "#ffc24d"],
   },
   {
     name: "Холод",
-    mode: 1, edge: 30, base: 0.364, rim: 0, rimPos: 0.5, rimWidth: 0.05,
+    mode: 1, edge: 30, base: 0.364, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0, accent: "#ffffff",
     speed: 588, warp: 90, scale: 120, bright: 100, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#150b28", "#2c2181", "#593a8d", "#ca86cc", "#f2cf57"],
   },
   {
     name: "Кислота",
-    mode: 1, edge: 85, base: 0.408, rim: 0, rimPos: 0.5, rimWidth: 0.05,
+    mode: 1, edge: 85, base: 0.408, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0, accent: "#ffffff",
     speed: 661, warp: 115, scale: 105, bright: 105, grain: 100, spark: true, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#472493", "#5424a0", "#d94199", "#e5f190", "#f7e30b"],
   },
   {
     name: "Диагонали",
-    mode: 2, edge: 45, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05,
+    mode: 2, edge: 45, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0, accent: "#ffffff",
     speed: 612, warp: 70, scale: 130, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#050209", "#2a1550", "#62429c", "#a230a5", "#cb1e61", "#ffb347"],
   },
   {
     name: "Нить",
-    mode: 1, edge: 80, base: 0.11, rim: 1.1, rimPos: 0.32, rimWidth: 0.025,
+    mode: 1, edge: 80, base: 0.11, rim: 1.1, rimPos: 0.32, rimWidth: 0.025, orbPulse: 0, accent: "#fffcff",
     speed: 632, warp: 70, scale: 190, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
     colors: ["#000000", "#020204", "#1c5fc9", "#7b2fd4", "#ff4d1f", "#ffb648"],
+  },
+  {
+    name: "Медуза",
+    mode: 3, edge: 0, base: 0.34, rim: 0, rimPos: 0.5, rimWidth: 0.05, orbPulse: 0.22, accent: "#edf6ff",
+    speed: 632, warp: 22, scale: 100, bright: 100, grain: 100, spark: false, sparkCount: 6, sparkSize: 100, sparkSpeed: 100, sparkOpacity: 85,
+    colors: ["#000000", "#170502", "#c23a1a", "#16217a", "#4f7fe0", "#eef3ff"],
   },
 ];
 
@@ -546,7 +595,8 @@ const MAX_COLORS = 6;
 // Живое состояние каждого слота: правки не теряются при переключении.
 const slots = PRESETS.map(p => ({
   mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
-  rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth,
+  rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth, orbPulse: p.orbPulse,
+  accent: p.accent,
   sparkCount: p.sparkCount, sparkSize: p.sparkSize,
   sparkSpeed: p.sparkSpeed, sparkOpacity: p.sparkOpacity,
   speed: p.speed, warp: p.warp, scale: p.scale,
@@ -555,6 +605,9 @@ const slots = PRESETS.map(p => ({
 }));
 let active = 0;
 let colors = slots[0].colors;
+const accentInput = document.getElementById("accent");
+let accentColor = slots[0].accent;
+accentInput.addEventListener("input", () => { accentColor = accentInput.value; });
 
 function compile(type, src) {
   const s = gl.createShader(type);
@@ -586,7 +639,8 @@ gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const U = {};
 for (const n of ["uRes","uTime","uWarp","uScale","uBright","uGrain","uCount",
                  "uMode","uSpark","uSparkThr","uSparkPx","uSparkSize","uSparkSpeed",
-                 "uEdge","uBase","uRim","uRimPos","uRimWidth","uWall"]) {
+                 "uEdge","uBase","uRim","uRimPos","uRimWidth","uOrbPulse",
+                 "uAccentCol","uWall"]) {
   U[n] = gl.getUniformLocation(prog, n);
 }
 const uColLoc = [];
@@ -625,6 +679,7 @@ function saveSlot() {
   s.sparkSpeed   = +S.sparkspeed.value;
   s.sparkOpacity = +S.sparkopacity.value;
   s.colors = colors.slice(0, +S.count.value);
+  s.accent = accentColor;
 }
 
 function loadSlot(i) {
@@ -643,12 +698,14 @@ function loadSlot(i) {
   S.sparkopacity.value = s.sparkOpacity;
   sparkBox.checked = s.spark;
   colors = s.colors.slice();
+  accentColor = s.accent;
+  accentInput.value = s.accent;
   buildSwatches();
   showValues();
   presetSelect.value = i;
-  // Режим лент и диагоналей регулируется кромкой, мягкие пятна — нет.
+  // Режим лент и диагоналей регулируется кромкой, мягкие пятна и орб — нет.
   document.getElementById("row-edge").style.display =
-    s.mode === 0 ? "none" : "";
+    (s.mode === 0 || s.mode === 3) ? "none" : "";
 }
 
 // Ползунок скорости нелинейный: 0..15x на кубической кривой. Иначе рабочая
@@ -718,7 +775,8 @@ document.getElementById("preset").addEventListener("click", () => {
   const p = PRESETS[active];
   slots[active] = {
     mode: p.mode, edge: p.edge, base: p.base, spark: p.spark,
-    rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth,
+    rim: p.rim, rimPos: p.rimPos, rimWidth: p.rimWidth, orbPulse: p.orbPulse,
+  accent: p.accent,
     sparkCount: p.sparkCount, sparkSize: p.sparkSize,
     sparkSpeed: p.sparkSpeed, sparkOpacity: p.sparkOpacity,
     speed: p.speed, warp: p.warp, scale: p.scale,
@@ -779,6 +837,8 @@ function presetConfig(s, i) {
       rim: +s.rim.toFixed(3),                         // uRim, сила глянцевого блика
       rimPos: +s.rimPos.toFixed(3),                   // uRimPos
       rimWidth: +s.rimWidth.toFixed(4),                // uRimWidth
+      orbPulse: +s.orbPulse.toFixed(3),                // uOrbPulse
+      accent: s.accent,                                // uAccentCol, цвет блика/пульса
       sparkles: s.spark,
       sparklesCount: s.sparkCount,                    // 0..300, целевое число искр
       sparklesSize: +(s.sparkSize / 100).toFixed(3),        // uSparkSize
@@ -811,6 +871,10 @@ function config() {
            "в линейном пространстве до гамма-коррекции, цвет (1, .97, 1)",
       diagonalBands: "проекция на диагональ (.72, .69), треугольная волна, " +
                      "f = pow(tri, 2.5) * (.75 + edge * .35)",
+      orb: "радиальное свечение из центра (.5, .56): f = 1 - nd/1.7, где " +
+           "nd = расстояние/радиус; контур колышет угловой fbm * warp, " +
+           "вся форма дышит (радиус *= 1 + .05*sin(t*.35)); orbPulse — " +
+           "кольцо-пульс, бежит по nd от центра к краю каждые ~8.3с",
       sparkles: "сетка 16 ячеек в ширину, целиком перетасовывается каждые 2.4с " +
                 "по uWall; sparklesCount 0..300 -> порог из totalCells; размер " +
                 "2-5px радиуса * sparklesSize; мигание по uWall * sparklesSpeed, " +
@@ -861,6 +925,11 @@ function applyToSlot(slot, block) {
   if (typeof l.rim === "number")        { slot.rim      = Math.max(0, l.rim); touched++; }
   if (typeof l.rimPos === "number")     { slot.rimPos   = Math.max(0, Math.min(1, l.rimPos)); touched++; }
   if (typeof l.rimWidth === "number")   { slot.rimWidth = Math.max(0.001, l.rimWidth); touched++; }
+  if (typeof l.orbPulse === "number")   { slot.orbPulse = Math.max(0, l.orbPulse); touched++; }
+  if (typeof l.accent === "string" && HEX.test(l.accent.trim())) {
+    slot.accent = l.accent.trim().toLowerCase();
+    touched++;
+  }
   if (typeof l.sparkles === "boolean")  { slot.spark  = l.sparkles; touched++; }
   if (typeof l.sparklesCount === "number") { slot.sparkCount = lim(S.sparkcount, l.sparklesCount); touched++; }
   if (typeof l.sparklesSize === "number") { slot.sparkSize = lim(S.sparksize, l.sparklesSize * 100); touched++; }
@@ -1032,6 +1101,8 @@ function frame(now) {
   gl.uniform1f(U.uRim, slots[active].rim);
   gl.uniform1f(U.uRimPos, slots[active].rimPos);
   gl.uniform1f(U.uRimWidth, slots[active].rimWidth);
+  gl.uniform1f(U.uOrbPulse, slots[active].orbPulse);
+  gl.uniform3fv(U.uAccentCol, hexToRgb(accentColor || "#ffffff"));
   gl.uniform1f(U.uSpark, sparkBox.checked ? +S.sparkopacity.value / 100 : 0.0);
   gl.uniform1f(U.uSparkSize, +S.sparksize.value / 100);
   gl.uniform1f(U.uSparkSpeed, +S.sparkspeed.value / 100);
