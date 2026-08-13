@@ -412,19 +412,21 @@ float fieldOrb(vec2 uv, float t, out float ndOut) {
 // Мелкая сетка ячеек (SPARK_CELLS в ширину — с запасом под до 300 штук),
 // в каждой не больше одной искры со своей фазой — иначе они мигают в
 // такт, и это сразу читается как узор. Порог редкости берётся со
-// слайдера (uSparkThr, JS считает его из целевого числа искр). Каждые
-// SPARK_GEN секунд по «часам» вся сетка целиком перетасовывается —
-// новый набор случайных ячеек проходит порог, старый гаснет — поэтому
-// искры не мигают вечно в одних и тех же точках, а появляются по всей
-// площади экрана.
+// слайдера (uSparkThr, JS считает его из целевого числа искр).
+//
+// Каждые SPARK_GEN секунд по «часам» набор активных ячеек перетасовывается
+// на новый случайный — так искры успевают появиться по всей площади, а не
+// мигать вечно в одних и тех же точках. Но смена поколения целиком —
+// это ДРУГОЙ набор ячеек, не то же самое мигание в новом месте, поэтому
+// просто переключить genOff означало бы мгновенный скачок яркости кадр
+// в кадр. Вместо этого на каждый пиксель считаем сразу два соседних
+// поколения и кроссфейдим между ними (окна половинного нахлёста, как
+// в оверлап-эйде): пока одно догорает, следующее уже разгорается.
 const float SPARK_CELLS = 16.0;
 const float SPARK_GEN = 2.4;
-float sparkles(vec2 uv, float t) {
+
+float sparkleGen(vec2 f, vec2 cell, vec2 genOff, float t) {
   float sum = 0.0;
-  vec2 genOff = vec2(floor(t / SPARK_GEN) * 13.73, floor(t / SPARK_GEN) * 91.27);
-  vec2 g = uv * vec2(SPARK_CELLS, SPARK_CELLS * uRes.y / uRes.x);
-  vec2 cell = floor(g);
-  vec2 f = fract(g);
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       vec2 c = cell + vec2(float(dx), float(dy));
@@ -448,6 +450,24 @@ float sparkles(vec2 uv, float t) {
     }
   }
   return sum;
+}
+
+float sparkles(vec2 uv, float t) {
+  vec2 g = uv * vec2(SPARK_CELLS, SPARK_CELLS * uRes.y / uRes.x);
+  vec2 cell = floor(g);
+  vec2 f = fract(g);
+
+  // Сдвиг на пол-периода — границы окон приходятся на середину чужого
+  // поколения, а не совпадают с ним, иначе кроссфейд был бы не нужен.
+  float genPos = t / SPARK_GEN - 0.5;
+  float g0 = floor(genPos);
+  float g1 = g0 + 1.0;
+  float w1 = smoothstep(0.0, 1.0, fract(genPos));
+  float w0 = 1.0 - w1;
+
+  vec2 off0 = vec2(g0 * 13.73, g0 * 91.27);
+  vec2 off1 = vec2(g1 * 13.73, g1 * 91.27);
+  return sparkleGen(f, cell, off0, t) * w0 + sparkleGen(f, cell, off1, t) * w1;
 }
 
 void main() {
